@@ -1,0 +1,26 @@
+
+# PrimalRealms Configuration
+
+# Energy settings
+energy:
+  starting-energy: 0
+  minimum-energy: -5
+  maximum-energy: 5
+  kill-reward: 1
+  death-penalty: 1
+
+# Ability settings
+abilities:
+  # Ability cooldowns, in seconds
+  default-cooldown: 30
+
+  # Whether abilities can be used in any biome
+  require-specific-biome: false
+
+# General settings
+settings:
+  # Send a message when a player gains or loses energy
+  announce-energy-changes: true
+
+  # Save player data when it changes
+  save-player-data: true

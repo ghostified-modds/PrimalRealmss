@@ -12,6 +12,10 @@ commands:
     usage: /primal help
     aliases: [pr]
 
+  energy:
+    description: View your current Primal Energy.
+    usage: /energy
+
 permissions:
   primal.admin:
     description: Manage PrimalRealms players and Energy.

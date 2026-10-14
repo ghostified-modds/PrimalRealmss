@@ -1,0 +1,18 @@
+name: PrimalRealms
+version: '0.1.0'
+main: com.primalrealms.PrimalRealmsPlugin
+api-version: '1.21'
+description: Environmental powers and kill-based Energy progression.
+
+author: PrimalRealms
+
+commands:
+  primal:
+    description: Main PrimalRealms command.
+    usage: /primal help
+    aliases: [pr]
+
+permissions:
+  primal.admin:
+    description: Manage PrimalRealms players and Energy.
+    default: op

@@ -264,10 +264,11 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
             createEnergyItem()
         );
 
-        // Eight gold ingots surrounding one amethyst shard.
-        recipe.shape("GGG", "GAG", "GGG");
-        recipe.setIngredient('G', Material.GOLD_INGOT);
-        recipe.setIngredient('A', Material.AMETHYST_SHARD);
+        // Eight Netherite ingots surrounding a Nether Star.
+        // This is intentionally much more expensive than the Affinity Reroll recipe.
+        recipe.shape("NNN", "NSN", "NNN");
+        recipe.setIngredient('N', Material.NETHERITE_INGOT);
+        recipe.setIngredient('S', Material.NETHER_STAR);
 
         Bukkit.addRecipe(recipe);
     }

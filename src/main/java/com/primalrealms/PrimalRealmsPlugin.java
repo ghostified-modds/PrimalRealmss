@@ -3,6 +3,8 @@ package com.primalrealms;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -10,8 +12,16 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.ShapedRecipe;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,6 +38,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
     private File dataFile;
     private YamlConfiguration data;
+    private NamespacedKey rerollKey;
 
     private final String[] availableAffinities = {
         "Flora", "Abyss", "Sol", "Terra", "Tempest", "Umbra"
@@ -38,7 +49,10 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         saveDefaultConfig();
         loadPlayerData();
 
+        rerollKey = new NamespacedKey(this, "affinity_reroll");
+
         Bukkit.getPluginManager().registerEvents(this, this);
+        registerRerollRecipe();
 
         getLogger().info("PrimalRealms has awakened!");
     }
@@ -60,8 +74,10 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                 if (data.isInt(key)) {
                     energy.put(uuid, clampEnergy(data.getInt(key)));
                 } else {
-                    energy.put(uuid, clampEnergy(data.getInt(key + ".energy",
-                        getConfig().getInt("energy.starting-energy", 0))));
+                    energy.put(uuid, clampEnergy(data.getInt(
+                        key + ".energy",
+                        getConfig().getInt("energy.starting-energy", 0)
+                    )));
 
                     String affinity = data.getString(key + ".affinity");
 
@@ -139,7 +155,6 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                 return true;
             }
         }
-
         return false;
     }
 
@@ -164,9 +179,112 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
             + "Your journey with PrimalRealms begins now.");
     }
 
+    private ItemStack createRerollItem() {
+        ItemStack item = new ItemStack(Material.NETHER_STAR);
+        ItemMeta meta = item.getItemMeta();
+
+        meta.setDisplayName(ChatColor.LIGHT_PURPLE.toString()
+            + ChatColor.BOLD + "Affinity Reroll");
+
+        meta.setLore(java.util.Arrays.asList(
+            ChatColor.GRAY + "Right-click to change your affinity.",
+            ChatColor.YELLOW + "A new power awaits..."
+        ));
+
+        meta.addEnchant(
+            org.bukkit.enchantments.Enchantment.UNBREAKING,
+            1,
+            true
+        );
+
+        meta.setUnbreakable(true);
+        meta.getPersistentDataContainer().set(
+            rerollKey,
+            PersistentDataType.BYTE,
+            (byte) 1
+        );
+
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private void registerRerollRecipe() {
+        ItemStack result = createRerollItem();
+        ShapedRecipe recipe = new ShapedRecipe(
+            new NamespacedKey(this, "affinity_reroll_recipe"),
+            result
+        );
+
+        recipe.shape("DGD", "GNG", "DGD");
+        recipe.setIngredient('D', Material.DIAMOND_BLOCK);
+        recipe.setIngredient('G', Material.GOLD_BLOCK);
+        recipe.setIngredient('N', Material.NETHER_STAR);
+
+        Bukkit.addRecipe(recipe);
+    }
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         assignRandomAffinity(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND) {
+            return;
+        }
+
+        if (event.getItem() == null || !event.getItem().hasItemMeta()) {
+            return;
+        }
+
+        ItemMeta meta = event.getItem().getItemMeta();
+
+        if (!meta.getPersistentDataContainer().has(
+            rerollKey,
+            PersistentDataType.BYTE
+        )) {
+            return;
+        }
+
+        if (!event.getAction().isRightClick()) {
+            return;
+        }
+
+        event.setCancelled(true);
+
+        Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
+        String current = affinities.get(uuid);
+
+        if (current == null) {
+            assignRandomAffinity(player);
+            current = affinities.get(uuid);
+        }
+
+        String next;
+        do {
+            next = availableAffinities[
+                random.nextInt(availableAffinities.length)
+            ];
+        } while (next.equalsIgnoreCase(current));
+
+        affinities.put(uuid, next);
+        savePlayerData();
+
+        ItemStack held = event.getItem();
+        if (held.getAmount() <= 1) {
+            player.getInventory().setItemInMainHand(null);
+        } else {
+            held.setAmount(held.getAmount() - 1);
+        }
+
+        player.sendMessage(ChatColor.LIGHT_PURPLE
+            + "Your affinity has changed!");
+        player.sendMessage(ChatColor.GRAY + current + ChatColor.WHITE
+            + " -> " + ChatColor.GOLD + next);
+        player.sendMessage(ChatColor.GRAY
+            + "Your Energy has not changed.");
     }
 
     @EventHandler
@@ -205,7 +323,6 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                 ChatColor.GOLD + "Your Primal Energy: "
                 + ChatColor.YELLOW + getEnergy(player.getUniqueId())
             );
-
             return true;
         }
 

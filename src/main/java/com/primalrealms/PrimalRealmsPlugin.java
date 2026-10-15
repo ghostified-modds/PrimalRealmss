@@ -249,7 +249,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
             ChatColor.YELLOW + "Right-click to absorb it."
         ));
         meta.addEnchant(Enchantment.UNBREAKING, 1, true);
-        meta.setItemFlags(org.bukkit.inventory.ItemFlag.HIDE_ENCHANTS);
+        meta.addItemFlags(org.bukkit.inventory.ItemFlag.HIDE_ENCHANTS);
         meta.getPersistentDataContainer().set(
             energyItemKey, PersistentDataType.BYTE, (byte) 1
         );

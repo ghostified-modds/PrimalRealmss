@@ -29,6 +29,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 import java.io.File;
 import java.io.IOException;
@@ -73,6 +75,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 applyPassive(player);
+                showCooldownDisplay(player);
             }
         }, 20L, 20L);
 
@@ -510,6 +513,35 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         return best;
     }
 
+    private void showCooldownDisplay(Player player) {
+        String affinity = affinities.get(player.getUniqueId());
+        if (affinity == null) return;
+
+        long now = System.currentTimeMillis();
+        String first = getCooldownLabel(player, affinity, 1, now);
+        String second = getCooldownLabel(player, affinity, 2, now);
+
+        player.sendActionBar(
+            Component.text("Ability 1: ", NamedTextColor.GRAY)
+                .append(first.equals("READY")
+                    ? Component.text(first, NamedTextColor.GREEN)
+                    : Component.text(first, NamedTextColor.GOLD))
+                .append(Component.text("  |  Ability 2: ", NamedTextColor.GRAY))
+                .append(second.equals("READY")
+                    ? Component.text(second, NamedTextColor.GREEN)
+                    : Component.text(second, NamedTextColor.GOLD))
+        );
+    }
+
+    private String getCooldownLabel(Player player, String affinity,
+                                    int number, long now) {
+        String key = player.getUniqueId() + ":"
+            + affinity.toLowerCase() + ":" + number;
+        long readyAt = cooldowns.getOrDefault(key, 0L);
+        if (now >= readyAt) return "READY";
+        return ((readyAt - now + 999) / 1000) + "s";
+    }
+
     private void activateAbility(Player player, int number) {
         String affinity = affinities.get(player.getUniqueId());
 
@@ -532,14 +564,17 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
             return;
         }
 
-        long cooldown = 15000L;
-
-        if (affinity.equalsIgnoreCase("Terra") && number == 2) {
-            cooldown = 20000L;
-        }
-
-        if (affinity.equalsIgnoreCase("Umbra") && number == 2) {
-            cooldown = 20000L;
+        // Ability-specific cooldowns, in milliseconds.
+        // Standard abilities: 45-60 seconds. Stronger abilities: 95-105 seconds.
+        long cooldown;
+        switch (affinity.toLowerCase()) {
+            case "flora" -> cooldown = (number == 1) ? 45_000L : 100_000L;
+            case "abyss" -> cooldown = (number == 1) ? 55_000L : 50_000L;
+            case "sol" -> cooldown = (number == 1) ? 50_000L : 100_000L;
+            case "terra" -> cooldown = (number == 1) ? 60_000L : 105_000L;
+            case "tempest" -> cooldown = (number == 1) ? 55_000L : 45_000L;
+            case "umbra" -> cooldown = (number == 1) ? 45_000L : 95_000L;
+            default -> cooldown = 60_000L;
         }
 
         boolean success = false;
@@ -568,14 +603,14 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     success = true;
                 } else {
                     player.setHealth(Math.min(
-                        player.getMaxHealth(), player.getHealth() + 4.0));
+                        player.getMaxHealth(), player.getHealth() + 3.0));
                     giveEffect(player, PotionEffectType.REGENERATION, 60, 0);
 
                     for (Entity entity : player.getNearbyEntities(5, 5, 5)) {
                         if (entity instanceof Player ally
                                 && !ally.equals(player)) {
                             ally.setHealth(Math.min(
-                                ally.getMaxHealth(), ally.getHealth() + 4.0));
+                                ally.getMaxHealth(), ally.getHealth() + 3.0));
                             giveEffect(ally, PotionEffectType.REGENERATION, 60, 0);
                         }
                     }
@@ -633,7 +668,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         return;
                     }
 
-                    target.damage(5.0, player);
+                    target.damage(4.0, player);
                     target.setFireTicks(Math.max(target.getFireTicks(), 40));
 
                     player.sendMessage(ChatColor.GOLD + "Solar Lance!");
@@ -644,7 +679,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     for (Entity entity : player.getNearbyEntities(5, 3, 5)) {
                         if (entity instanceof LivingEntity target
                                 && !target.equals(player) && canAffect(player, target)) {
-                            target.damage(4.0, player);
+                            target.damage(3.0, player);
                             target.addPotionEffect(new PotionEffect(
                                 PotionEffectType.GLOWING, 60, 0));
                             hit++;
@@ -664,7 +699,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     for (Entity entity : player.getNearbyEntities(4, 3, 4)) {
                         if (entity instanceof LivingEntity target
                                 && !target.equals(player) && canAffect(player, target)) {
-                            target.damage(4.0, player);
+                            target.damage(3.0, player);
 
                             Vector knockback = target.getLocation().toVector()
                                 .subtract(player.getLocation().toVector());
@@ -702,7 +737,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
                     // Visual lightning only, so nearby trusted players are not hurt by splash damage.
                     target.getWorld().strikeLightningEffect(target.getLocation());
-                    target.damage(5.0, player);
+                    target.damage(4.0, player);
                     player.sendMessage(ChatColor.AQUA
                         + "Lightning Bolt unleashed!");
                     success = true;

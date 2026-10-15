@@ -11,7 +11,9 @@ commands:
     description: Main PrimalRealms command.
     usage: /primal help
     aliases: [pr]
-
+  ability:
+    description: Activate your affinity abilities.
+    usage: /ability <1|2>
   energy:
     description: View your current Primal Energy.
     usage: /energy

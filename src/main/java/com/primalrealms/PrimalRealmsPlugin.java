@@ -348,32 +348,40 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
     }
 
     // Find the player the caster is looking toward.
-    private Player findTarget(Player caster, double range) {
-        Player best = null;
-        double bestDistance = range * range;
-        Vector look = caster.getEyeLocation().getDirection().normalize();
+   
+private org.bukkit.entity.LivingEntity findTarget(Player caster, double range) {
+    org.bukkit.entity.LivingEntity best = null;
+    double bestDistance = range * range;
 
-        for (Entity entity : caster.getNearbyEntities(range, range, range)) {
-            if (!(entity instanceof Player target) || target.equals(caster)) {
-                continue;
-            }
-            if (!caster.hasLineOfSight(target)) continue;
+    Vector look = caster.getEyeLocation().getDirection().normalize();
 
-            Vector direction = target.getEyeLocation().toVector()
-                .subtract(caster.getEyeLocation().toVector());
-            double distance = direction.lengthSquared();
-            if (distance <= 0 || distance > range * range) continue;
-
-            direction.normalize();
-            if (look.dot(direction) < 0.94) continue;
-
-            if (distance < bestDistance) {
-                best = target;
-                bestDistance = distance;
-            }
+    for (Entity entity : caster.getNearbyEntities(range, range, range)) {
+        if (!(entity instanceof org.bukkit.entity.LivingEntity target)
+                || target.equals(caster)) {
+            continue;
         }
-        return best;
+
+        if (!caster.hasLineOfSight(target)) continue;
+
+        Vector direction = target.getEyeLocation().toVector()
+            .subtract(caster.getEyeLocation().toVector());
+
+        double distance = direction.lengthSquared();
+
+        if (distance <= 0 || distance > range * range) continue;
+
+        direction.normalize();
+
+        if (look.dot(direction) < 0.94) continue;
+
+        if (distance < bestDistance) {
+            best = target;
+            bestDistance = distance;
+        }
     }
+
+    return best;
+}
 
     private void activateAbility(Player player, int number) {
         String affinity = affinities.get(player.getUniqueId());

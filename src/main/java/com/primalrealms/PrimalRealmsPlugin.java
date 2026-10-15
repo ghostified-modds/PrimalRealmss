@@ -34,7 +34,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.Random;
 import java.util.UUID;
 
@@ -42,6 +44,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
     private final Map<UUID, Integer> energy = new HashMap<>();
     private final Map<UUID, String> affinities = new HashMap<>();
+    private final Map<UUID, Set<UUID>> trustedPlayers = new HashMap<>();
     private final Map<String, Long> cooldowns = new HashMap<>();
     private final Map<UUID, Long> lastDamage = new HashMap<>();
     private final Random random = new Random();
@@ -99,6 +102,15 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     if (affinity != null && isValidAffinity(affinity)) {
                         affinities.put(uuid, affinity);
                     }
+
+                    for (String trustedId : data.getStringList(key + ".trusted")) {
+                        try {
+                            trustedPlayers.computeIfAbsent(uuid, ignored -> new HashSet<>())
+                                .add(UUID.fromString(trustedId));
+                        } catch (IllegalArgumentException exception) {
+                            getLogger().warning("Skipping invalid trusted UUID for " + key);
+                        }
+                    }
                 }
             } catch (IllegalArgumentException exception) {
                 getLogger().warning("Skipping invalid player UUID: " + key);
@@ -115,6 +127,11 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
         for (Map.Entry<UUID, String> entry : affinities.entrySet()) {
             data.set(entry.getKey() + ".affinity", entry.getValue());
+        }
+
+        for (Map.Entry<UUID, Set<UUID>> entry : trustedPlayers.entrySet()) {
+            data.set(entry.getKey() + ".trusted", entry.getValue().stream()
+                .map(UUID::toString).toList());
         }
 
         try {
@@ -347,6 +364,53 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         ));
     }
 
+    private boolean isTrusted(Player caster, Player target) {
+        if (caster.getUniqueId().equals(target.getUniqueId())) return false;
+        return trustedPlayers.getOrDefault(caster.getUniqueId(), Set.of())
+            .contains(target.getUniqueId());
+    }
+
+    private boolean canAffect(Player caster, Entity target) {
+        return !(target instanceof Player targetPlayer)
+            || !isTrusted(caster, targetPlayer);
+    }
+
+    private void trustPlayer(Player player, String name, boolean trust) {
+        if (name.equalsIgnoreCase(player.getName())) {
+            player.sendMessage(ChatColor.RED + "You cannot trust or untrust yourself.");
+            return;
+        }
+
+        Player onlineTarget = Bukkit.getPlayerExact(name);
+        if (onlineTarget == null && Bukkit.getOfflinePlayerIfCached(name) == null) {
+            player.sendMessage(ChatColor.RED
+                + "That player has never joined or their name could not be found.");
+            return;
+        }
+
+        UUID targetId = onlineTarget != null
+            ? onlineTarget.getUniqueId()
+            : Bukkit.getOfflinePlayerIfCached(name).getUniqueId();
+        Set<UUID> trusted = trustedPlayers.computeIfAbsent(
+            player.getUniqueId(), ignored -> new HashSet<>());
+
+        if (trust) {
+            if (!trusted.add(targetId)) {
+                player.sendMessage(ChatColor.YELLOW + name + " is already trusted.");
+            } else {
+                player.sendMessage(ChatColor.GREEN + "You now trust " + name
+                    + ". Your abilities will not target them.");
+            }
+        } else {
+            if (!trusted.remove(targetId)) {
+                player.sendMessage(ChatColor.YELLOW + name + " is not on your trusted list.");
+            } else {
+                player.sendMessage(ChatColor.GREEN + "You no longer trust " + name + ".");
+            }
+        }
+        savePlayerData();
+    }
+
     private LivingEntity findTarget(Player caster, double range) {
         LivingEntity best = null;
         double bestDistance = range * range;
@@ -354,7 +418,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
         for (Entity entity : caster.getNearbyEntities(range, range, range)) {
             if (!(entity instanceof LivingEntity target)
-                    || target.equals(caster)) {
+                    || target.equals(caster) || !canAffect(caster, target)) {
                 continue;
             }
 
@@ -512,7 +576,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
                     for (Entity entity : player.getNearbyEntities(5, 3, 5)) {
                         if (entity instanceof LivingEntity target
-                                && !target.equals(player)) {
+                                && !target.equals(player) && canAffect(player, target)) {
                             target.damage(4.0, player);
                             target.addPotionEffect(new PotionEffect(
                                 PotionEffectType.GLOWING, 60, 0));
@@ -532,7 +596,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
                     for (Entity entity : player.getNearbyEntities(4, 3, 4)) {
                         if (entity instanceof LivingEntity target
-                                && !target.equals(player)) {
+                                && !target.equals(player) && canAffect(player, target)) {
                             target.damage(4.0, player);
 
                             Vector knockback = target.getLocation().toVector()
@@ -569,7 +633,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         return;
                     }
 
-                    target.getWorld().strikeLightning(target.getLocation());
+                    // Visual lightning only, so nearby trusted players are not hurt by splash damage.
+                    target.getWorld().strikeLightningEffect(target.getLocation());
+                    target.damage(5.0, player);
                     player.sendMessage(ChatColor.AQUA
                         + "Lightning Bolt unleashed!");
                     success = true;
@@ -623,7 +689,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
                     for (Entity entity : player.getNearbyEntities(5, 3, 5)) {
                         if (entity instanceof LivingEntity target
-                                && !target.equals(player)) {
+                                && !target.equals(player) && canAffect(player, target)) {
                             target.addPotionEffect(new PotionEffect(
                                 PotionEffectType.WEAKNESS, 60, 0));
                             target.addPotionEffect(new PotionEffect(
@@ -677,12 +743,31 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
             return true;
         }
 
+        if (command.getName().equalsIgnoreCase("trust")
+                || command.getName().equalsIgnoreCase("untrust")) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage("This command can only be used in-game.");
+                return true;
+            }
+            if (args.length != 1 || args[0].isBlank()) {
+                player.sendMessage(ChatColor.YELLOW + "Usage: /"
+                    + command.getName().toLowerCase() + " <player>");
+                return true;
+            }
+            trustPlayer(player, args[0], command.getName().equalsIgnoreCase("trust"));
+            return true;
+        }
+
         if (command.getName().equalsIgnoreCase("primal")) {
             sender.sendMessage(ChatColor.GREEN + "PrimalRealms commands:");
             sender.sendMessage(ChatColor.YELLOW + "/energy"
                 + ChatColor.GRAY + " - View your Energy");
             sender.sendMessage(ChatColor.YELLOW + "/ability 1 or /ability 2"
                 + ChatColor.GRAY + " - Use your active abilities");
+            sender.sendMessage(ChatColor.YELLOW + "/trust <player>"
+                + ChatColor.GRAY + " - Protect a player from your abilities");
+            sender.sendMessage(ChatColor.YELLOW + "/untrust <player>"
+                + ChatColor.GRAY + " - Remove that protection");
             return true;
         }
 

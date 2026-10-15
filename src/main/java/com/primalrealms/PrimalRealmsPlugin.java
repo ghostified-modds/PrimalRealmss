@@ -20,8 +20,7 @@ import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.block.Block;
-import org.bukkit.block.BlockState;
+import org.bukkit.util.Vector;
 
 import java.io.File;
 import java.io.IOException;
@@ -34,6 +33,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
     private final Map<UUID, Integer> energy = new HashMap<>();
     private final Map<UUID, String> affinities = new HashMap<>();
+    private final Map<String, Long> cooldowns = new HashMap<>();
     private final Random random = new Random();
 
     private File dataFile;
@@ -192,16 +192,12 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         ));
 
         meta.addEnchant(
-            org.bukkit.enchantments.Enchantment.UNBREAKING,
-            1,
-            true
+            org.bukkit.enchantments.Enchantment.UNBREAKING, 1, true
         );
 
         meta.setUnbreakable(true);
         meta.getPersistentDataContainer().set(
-            rerollKey,
-            PersistentDataType.BYTE,
-            (byte) 1
+            rerollKey, PersistentDataType.BYTE, (byte) 1
         );
 
         item.setItemMeta(meta);
@@ -209,10 +205,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
     }
 
     private void registerRerollRecipe() {
-        ItemStack result = createRerollItem();
         ShapedRecipe recipe = new ShapedRecipe(
             new NamespacedKey(this, "affinity_reroll_recipe"),
-            result
+            createRerollItem()
         );
 
         recipe.shape("DGD", "GNG", "DGD");
@@ -230,26 +225,15 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND) {
-            return;
-        }
-
-        if (event.getItem() == null || !event.getItem().hasItemMeta()) {
-            return;
-        }
+        if (event.getHand() != EquipmentSlot.HAND) return;
+        if (event.getItem() == null || !event.getItem().hasItemMeta()) return;
+        if (!event.getAction().isRightClick()) return;
 
         ItemMeta meta = event.getItem().getItemMeta();
 
         if (!meta.getPersistentDataContainer().has(
-            rerollKey,
-            PersistentDataType.BYTE
-        )) {
-            return;
-        }
-
-        if (!event.getAction().isRightClick()) {
-            return;
-        }
+            rerollKey, PersistentDataType.BYTE
+        )) return;
 
         event.setCancelled(true);
 
@@ -306,6 +290,76 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    private void activateAbility(Player player, int number) {
+        UUID uuid = player.getUniqueId();
+        String affinity = affinities.get(uuid);
+
+        if (affinity == null) {
+            player.sendMessage(ChatColor.RED + "You don't have an affinity yet.");
+            return;
+        }
+
+        if (!affinity.equalsIgnoreCase("Tempest")) {
+            player.sendMessage(ChatColor.YELLOW
+                + affinity + " abilities haven't been implemented yet.");
+            return;
+        }
+
+        String key = uuid + ":tempest:" + number;
+        long now = System.currentTimeMillis();
+        long readyAt = cooldowns.getOrDefault(key, 0L);
+
+        if (now < readyAt) {
+            long seconds = (readyAt - now + 999) / 1000;
+            player.sendMessage(ChatColor.RED
+                + "That ability is on cooldown for " + seconds + "s.");
+            return;
+        }
+
+        if (number == 1) {
+            Player target = null;
+            for (org.bukkit.entity.Entity entity :
+                    player.getNearbyEntities(12, 12, 12)) {
+                if (entity instanceof Player nearby
+                        && !nearby.equals(player)
+                        && player.hasLineOfSight(nearby)
+                        && player.getLocation().distanceSquared(
+                            nearby.getLocation()) <= 144) {
+                    Vector direction = nearby.getEyeLocation().toVector()
+                        .subtract(player.getEyeLocation().toVector());
+
+                    if (direction.lengthSquared() > 0) {
+                        direction.normalize();
+                    }
+
+                    if (player.getEyeLocation().getDirection()
+                            .normalize().dot(direction) > 0.97) {
+                        target = nearby;
+                        break;
+                    }
+                }
+            }
+
+            if (target == null) {
+                player.sendMessage(ChatColor.RED
+                    + "Look directly at a nearby player to use Lightning Bolt.");
+                return;
+            }
+
+            target.getWorld().strikeLightning(target.getLocation());
+            cooldowns.put(key, now + 15000);
+            player.sendMessage(ChatColor.AQUA + "Lightning Bolt unleashed!");
+        } else if (number == 2) {
+            Vector direction = player.getLocation().getDirection().normalize();
+            direction.multiply(1.4);
+            direction.setY(0.45);
+
+            player.setVelocity(direction);
+            cooldowns.put(key, now + 10000);
+            player.sendMessage(ChatColor.AQUA + "Windstep activated!");
+        }
+    }
+
     @Override
     public boolean onCommand(
         CommandSender sender,
@@ -319,10 +373,25 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                 return true;
             }
 
-            player.sendMessage(
-                ChatColor.GOLD + "Your Primal Energy: "
-                + ChatColor.YELLOW + getEnergy(player.getUniqueId())
-            );
+            player.sendMessage(ChatColor.GOLD + "Your Primal Energy: "
+                + ChatColor.YELLOW + getEnergy(player.getUniqueId()));
+            return true;
+        }
+
+        if (command.getName().equalsIgnoreCase("ability")) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage("This command can only be used in-game.");
+                return true;
+            }
+
+            if (args.length != 1
+                    || (!args[0].equals("1") && !args[0].equals("2"))) {
+                player.sendMessage(ChatColor.YELLOW
+                    + "Usage: /ability <1|2>");
+                return true;
+            }
+
+            activateAbility(player, Integer.parseInt(args[0]));
             return true;
         }
 
@@ -330,6 +399,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
             sender.sendMessage(ChatColor.GREEN + "PrimalRealms commands:");
             sender.sendMessage(ChatColor.YELLOW + "/energy"
                 + ChatColor.GRAY + " - View your Energy");
+            sender.sendMessage(ChatColor.YELLOW + "/ability 1 or /ability 2"
+                + ChatColor.GRAY + " - Use your active abilities");
             return true;
         }
 

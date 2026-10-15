@@ -52,6 +52,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
     private File dataFile;
     private YamlConfiguration data;
     private NamespacedKey rerollKey;
+    private NamespacedKey energyItemKey;
 
     private final String[] availableAffinities = {
         "Flora", "Abyss", "Sol", "Terra", "Tempest", "Umbra"
@@ -63,9 +64,11 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         loadPlayerData();
 
         rerollKey = new NamespacedKey(this, "affinity_reroll");
+        energyItemKey = new NamespacedKey(this, "primal_energy_item");
 
         Bukkit.getPluginManager().registerEvents(this, this);
         registerRerollRecipe();
+        registerEnergyRecipe();
 
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -236,6 +239,56 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         Bukkit.addRecipe(recipe);
     }
 
+    private ItemStack createEnergyItem() {
+        ItemStack item = new ItemStack(Material.AMETHYST_SHARD);
+        ItemMeta meta = item.getItemMeta();
+
+        meta.setDisplayName(ChatColor.AQUA.toString() + ChatColor.BOLD + "Primal Energy");
+        meta.setLore(Arrays.asList(
+            ChatColor.GRAY + "Contains 1 Primal Energy.",
+            ChatColor.YELLOW + "Right-click to absorb it."
+        ));
+        meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+        meta.setItemFlags(org.bukkit.inventory.ItemFlag.HIDE_ENCHANTS);
+        meta.getPersistentDataContainer().set(
+            energyItemKey, PersistentDataType.BYTE, (byte) 1
+        );
+
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private void registerEnergyRecipe() {
+        ShapedRecipe recipe = new ShapedRecipe(
+            new NamespacedKey(this, "primal_energy_recipe"),
+            createEnergyItem()
+        );
+
+        // Eight gold ingots surrounding one amethyst shard.
+        recipe.shape("GGG", "GAG", "GGG");
+        recipe.setIngredient('G', Material.GOLD_INGOT);
+        recipe.setIngredient('A', Material.AMETHYST_SHARD);
+
+        Bukkit.addRecipe(recipe);
+    }
+
+    private boolean isEnergyItem(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        ItemMeta meta = item.getItemMeta();
+        return meta.getPersistentDataContainer().has(
+            energyItemKey, PersistentDataType.BYTE
+        );
+    }
+
+    private void consumeOneFromMainHand(Player player) {
+        ItemStack held = player.getInventory().getItemInMainHand();
+        if (held.getAmount() <= 1) {
+            player.getInventory().setItemInMainHand(null);
+        } else {
+            held.setAmount(held.getAmount() - 1);
+        }
+    }
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         assignRandomAffinity(event.getPlayer());
@@ -247,14 +300,33 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         if (event.getItem() == null || !event.getItem().hasItemMeta()) return;
         if (!event.getAction().isRightClick()) return;
 
-        ItemMeta meta = event.getItem().getItemMeta();
+        Player player = event.getPlayer();
+        ItemStack clickedItem = event.getItem();
+
+        if (isEnergyItem(clickedItem)) {
+            event.setCancelled(true);
+            int currentEnergy = getEnergy(player.getUniqueId());
+            int maximumEnergy = getConfig().getInt("energy.maximum-energy", 5);
+
+            if (currentEnergy >= maximumEnergy) {
+                player.sendMessage(ChatColor.RED
+                    + "Your Primal Energy is already at its maximum (" + maximumEnergy + ").");
+                return;
+            }
+
+            consumeOneFromMainHand(player);
+            changeEnergy(player.getUniqueId(), 1);
+            player.sendMessage(ChatColor.AQUA + "You absorbed 1 Primal Energy!");
+            return;
+        }
+
+        ItemMeta meta = clickedItem.getItemMeta();
 
         if (!meta.getPersistentDataContainer().has(
                 rerollKey, PersistentDataType.BYTE)) return;
 
         event.setCancelled(true);
 
-        Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
         String current = affinities.get(uuid);
 
@@ -273,13 +345,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         affinities.put(uuid, next);
         savePlayerData();
 
-        ItemStack held = event.getItem();
-
-        if (held.getAmount() <= 1) {
-            player.getInventory().setItemInMainHand(null);
-        } else {
-            held.setAmount(held.getAmount() - 1);
-        }
+        consumeOneFromMainHand(player);
 
         player.sendMessage(ChatColor.LIGHT_PURPLE
             + "Your affinity has changed!");
@@ -722,8 +788,36 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                 return true;
             }
 
+            if (args.length == 1 && args[0].equalsIgnoreCase("withdraw")) {
+                int currentEnergy = getEnergy(player.getUniqueId());
+                if (currentEnergy < 1) {
+                    player.sendMessage(ChatColor.RED
+                        + "You need at least 1 Primal Energy to withdraw an Energy item.");
+                    return true;
+                }
+
+                ItemStack energyItem = createEnergyItem();
+                Map<Integer, ItemStack> leftovers = player.getInventory().addItem(energyItem);
+                if (!leftovers.isEmpty()) {
+                    player.sendMessage(ChatColor.RED
+                        + "Your inventory is full. Make room before withdrawing Energy.");
+                    return true;
+                }
+
+                changeEnergy(player.getUniqueId(), -1);
+                player.sendMessage(ChatColor.AQUA
+                    + "You withdrew 1 Primal Energy into an Energy item.");
+                return true;
+            }
+
+            if (args.length > 0) {
+                player.sendMessage(ChatColor.YELLOW + "Usage: /energy or /energy withdraw");
+                return true;
+            }
+
             player.sendMessage(ChatColor.GOLD + "Your Primal Energy: "
                 + ChatColor.YELLOW + getEnergy(player.getUniqueId()));
+            player.sendMessage(ChatColor.GRAY + "Use /energy withdraw to turn 1 Energy into an item.");
             return true;
         }
 

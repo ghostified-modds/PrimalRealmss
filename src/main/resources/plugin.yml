@@ -14,13 +14,13 @@ commands:
     description: Activate your affinity abilities.
     usage: /ability <1|2>
   energy:
-    description: View your current Primal Energy.
-    usage: /energy
+    description: View, withdraw, or use your Primal Energy.
+    usage: /energy [withdraw]
   trust:
     description: Prevent your abilities from affecting a player.
     usage: /trust <player>
   untrust:
-    description: Allow your abilities to affect a previously trusted player.
+    description: Remove a player from your trusted list.
     usage: /untrust <player>
 
 permissions:

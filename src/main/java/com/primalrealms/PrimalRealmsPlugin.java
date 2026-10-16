@@ -390,23 +390,19 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                 long lastHit = lastDamage.getOrDefault(
                     player.getUniqueId(), 0L);
 
-                if (System.currentTimeMillis() - lastHit >= 8000) {
+                // Flora's passive regeneration begins 3 seconds after taking damage.
+                if (System.currentTimeMillis() - lastHit >= 3000) {
                     giveEffect(player, PotionEffectType.REGENERATION, 40, 0);
                 }
             }
             case "abyss" -> {
                 if (player.isInWater()) {
-                    giveEffect(player, PotionEffectType.RESISTANCE, 40, 0);
+                    giveEffect(player, PotionEffectType.SPEED, 40, 0);
                 }
             }
             case "sol" -> {
-                Block block = player.getLocation().getBlock();
-
-                if (player.getWorld().isDayTime()
-                        && block.getLightFromSky() >= 12
-                        && block.getLightLevel() >= 12) {
-                    giveEffect(player, PotionEffectType.SPEED, 40, 0);
-                }
+                // Sol permanently grants Fire Resistance while this affinity is active.
+                giveEffect(player, PotionEffectType.FIRE_RESISTANCE, 40, 0);
             }
             case "terra" -> {
                 if (player.isOnGround()) {
@@ -419,9 +415,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                 }
             }
             case "umbra" -> {
-                if (player.getLocation().getBlock().getLightLevel() <= 4) {
-                    giveEffect(player, PotionEffectType.SPEED, 40, 0);
-                }
+                // Health Boost I adds two hearts while Umbra is the player's affinity.
+                giveEffect(player, PotionEffectType.HEALTH_BOOST, 40, 0);
             }
             default -> { }
         }
@@ -565,16 +560,15 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         }
 
         // Ability-specific cooldowns, in milliseconds.
-        // Standard abilities: 45-60 seconds. Stronger abilities: 95-105 seconds.
         long cooldown;
         switch (affinity.toLowerCase()) {
-            case "flora" -> cooldown = (number == 1) ? 45_000L : 100_000L;
-            case "abyss" -> cooldown = (number == 1) ? 55_000L : 50_000L;
-            case "sol" -> cooldown = (number == 1) ? 50_000L : 100_000L;
-            case "terra" -> cooldown = (number == 1) ? 60_000L : 105_000L;
-            case "tempest" -> cooldown = (number == 1) ? 55_000L : 45_000L;
-            case "umbra" -> cooldown = (number == 1) ? 45_000L : 95_000L;
-            default -> cooldown = 60_000L;
+            case "flora" -> cooldown = (number == 1) ? 180_000L : 270_000L;
+            case "abyss" -> cooldown = (number == 1) ? 120_000L : 180_000L;
+            case "sol" -> cooldown = (number == 1) ? 300_000L : 240_000L;
+            case "terra" -> cooldown = (number == 1) ? 120_000L : 240_000L;
+            case "tempest" -> cooldown = (number == 1) ? 220_000L : 135_000L;
+            case "umbra" -> cooldown = (number == 1) ? 160_000L : 130_000L;
+            default -> cooldown = 120_000L;
         }
 
         boolean success = false;
@@ -591,12 +585,12 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     }
 
                     if (target instanceof Player victim) {
-                        giveEffect(victim, PotionEffectType.SLOWNESS, 80, 1);
+                        giveEffect(victim, PotionEffectType.SLOWNESS, 200, 1);
                         victim.sendMessage(ChatColor.GREEN
                             + "Vines have snared you!");
                     } else {
                         target.addPotionEffect(new PotionEffect(
-                            PotionEffectType.SLOWNESS, 80, 1));
+                            PotionEffectType.SLOWNESS, 200, 1));
                     }
 
                     player.sendMessage(ChatColor.GREEN + "Vine Snare!");
@@ -604,18 +598,25 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                 } else {
                     player.setHealth(Math.min(
                         player.getMaxHealth(), player.getHealth() + 3.0));
-                    giveEffect(player, PotionEffectType.REGENERATION, 60, 0);
+                    // Regeneration III for 5 seconds.
+                    giveEffect(player, PotionEffectType.REGENERATION, 100, 2);
 
+                    // Floral Bloom only heals nearby players who the caster trusts.
+                    Set<UUID> trusted = trustedPlayers.getOrDefault(
+                        player.getUniqueId(), Set.of());
                     for (Entity entity : player.getNearbyEntities(5, 5, 5)) {
                         if (entity instanceof Player ally
-                                && !ally.equals(player)) {
+                                && !ally.equals(player)
+                                && trusted.contains(ally.getUniqueId())) {
                             ally.setHealth(Math.min(
                                 ally.getMaxHealth(), ally.getHealth() + 3.0));
-                            giveEffect(ally, PotionEffectType.REGENERATION, 60, 0);
+                            giveEffect(ally, PotionEffectType.REGENERATION, 100, 2);
+                            ally.sendMessage(ChatColor.GREEN
+                                + "Floral Bloom healed you!");
                         }
                     }
 
-                    player.sendMessage(ChatColor.GREEN + "Verdant Bloom!");
+                    player.sendMessage(ChatColor.GREEN + "Floral Bloom!");
                     success = true;
                 }
             }
@@ -648,12 +649,12 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     success = true;
                 } else {
                     Vector dash = player.getLocation().getDirection()
-                        .normalize().multiply(1.2);
+                        .normalize().multiply(2.0);
                     dash.setY(0.4);
                     player.setVelocity(dash);
 
-                    giveEffect(player, PotionEffectType.RESISTANCE, 40, 0);
-                    player.sendMessage(ChatColor.DARK_AQUA + "Void Surge!");
+                    giveEffect(player, PotionEffectType.RESISTANCE, 300, 0);
+                    player.sendMessage(ChatColor.DARK_AQUA + "Wave Surge!");
                     success = true;
                 }
             }
@@ -668,8 +669,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         return;
                     }
 
-                    target.damage(4.0, player);
-                    target.setFireTicks(Math.max(target.getFireTicks(), 40));
+                    target.damage(10.0, player);
+                    // Extremely long fire duration; water can still extinguish it.
+                    target.setFireTicks(Integer.MAX_VALUE);
 
                     player.sendMessage(ChatColor.GOLD + "Solar Lance!");
                     success = true;
@@ -681,7 +683,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                                 && !target.equals(player) && canAffect(player, target)) {
                             target.damage(3.0, player);
                             target.addPotionEffect(new PotionEffect(
-                                PotionEffectType.GLOWING, 60, 0));
+                                PotionEffectType.GLOWING, 600, 0));
                             hit++;
                         }
                     }
@@ -699,7 +701,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     for (Entity entity : player.getNearbyEntities(4, 3, 4)) {
                         if (entity instanceof LivingEntity target
                                 && !target.equals(player) && canAffect(player, target)) {
-                            target.damage(3.0, player);
+                            target.damage(6.0, player);
 
                             Vector knockback = target.getLocation().toVector()
                                 .subtract(player.getLocation().toVector());
@@ -718,9 +720,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         + "Seismic Strike! Targets hit: " + hit);
                     success = true;
                 } else {
-                    giveEffect(player, PotionEffectType.RESISTANCE, 100, 1);
-                    giveEffect(player, PotionEffectType.ABSORPTION, 100, 1);
-                    player.sendMessage(ChatColor.GRAY + "Earthguard!");
+                    giveEffect(player, PotionEffectType.RESISTANCE, 600, 1);
+                    giveEffect(player, PotionEffectType.ABSORPTION, 600, 1);
+                    player.sendMessage(ChatColor.GRAY + "Earth Guards!");
                     success = true;
                 }
             }
@@ -735,15 +737,24 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         return;
                     }
 
-                    // Visual lightning only, so nearby trusted players are not hurt by splash damage.
-                    target.getWorld().strikeLightningEffect(target.getLocation());
-                    target.damage(4.0, player);
+                    // Three spaced strikes; visual lightning avoids fire and environmental damage.
+                    final LivingEntity lightningTarget = target;
+                    for (int strike = 0; strike < 3; strike++) {
+                        long delay = strike * 8L;
+                        Bukkit.getScheduler().runTaskLater(this, () -> {
+                            if (lightningTarget.isValid() && !lightningTarget.isDead()) {
+                                lightningTarget.getWorld().strikeLightningEffect(
+                                    lightningTarget.getLocation());
+                                lightningTarget.damage(3.0, player);
+                            }
+                        }, delay);
+                    }
                     player.sendMessage(ChatColor.AQUA
-                        + "Lightning Bolt unleashed!");
+                        + "Lightning Bolt unleashed: 3 strikes!");
                     success = true;
                 } else {
                     Vector direction = player.getLocation().getDirection()
-                        .normalize().multiply(1.4);
+                        .normalize().multiply(2.2);
 
                     direction.setY(0.45);
                     player.setVelocity(direction);
@@ -760,7 +771,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     Location origin = player.getLocation();
                     Location destination = null;
 
-                    for (double distance = 5; distance >= 1; distance -= 1) {
+                    for (double distance = 8; distance >= 1; distance -= 1) {
                         Location candidate = origin.clone().add(
                             direction.clone().multiply(distance));
 
@@ -789,13 +800,13 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                 } else {
                     int hit = 0;
 
-                    for (Entity entity : player.getNearbyEntities(5, 3, 5)) {
+                    for (Entity entity : player.getNearbyEntities(8, 5, 8)) {
                         if (entity instanceof LivingEntity target
                                 && !target.equals(player) && canAffect(player, target)) {
                             target.addPotionEffect(new PotionEffect(
-                                PotionEffectType.WEAKNESS, 60, 0));
+                                PotionEffectType.WEAKNESS, 160, 0));
                             target.addPotionEffect(new PotionEffect(
-                                PotionEffectType.BLINDNESS, 40, 0));
+                                PotionEffectType.BLINDNESS, 100, 0));
                             hit++;
                         }
                     }

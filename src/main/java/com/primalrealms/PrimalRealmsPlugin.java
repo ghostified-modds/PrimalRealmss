@@ -376,8 +376,20 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         Player killer = victim.getKiller();
 
         if (killer != null) {
-            changeEnergy(killer.getUniqueId(),
-                getConfig().getInt("energy.kill-reward", 1));
+            int maximumEnergy = getConfig().getInt("energy.maximum-energy", 5);
+            int killerEnergy = getEnergy(killer.getUniqueId());
+
+            if (killerEnergy >= maximumEnergy) {
+                // A player already at maximum energy cannot absorb the kill reward,
+                // so leave a physical Energy item for them to collect or share.
+                killer.getWorld().dropItemNaturally(
+                    killer.getLocation(), createEnergyItem());
+                killer.sendMessage(ChatColor.AQUA
+                    + "You're already at maximum Primal Energy! An Energy item has dropped at your feet.");
+            } else {
+                changeEnergy(killer.getUniqueId(),
+                    getConfig().getInt("energy.kill-reward", 1));
+            }
         }
     }
 
@@ -427,6 +439,23 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         player.addPotionEffect(new PotionEffect(
             type, duration, amplifier, true, false, true
         ));
+    }
+
+    // Energy scaling: -5 = 0.5x, 0 = 1.0x (current baseline), +5 = 1.5x.
+    private double getEnergyMultiplier(Player player) {
+        return 1.0 + (getEnergy(player.getUniqueId()) * 0.10);
+    }
+
+    private double scalePower(Player player, double baseValue) {
+        return baseValue * getEnergyMultiplier(player);
+    }
+
+    private int scaleDuration(Player player, int baseTicks) {
+        return Math.max(1, (int) Math.round(baseTicks * getEnergyMultiplier(player)));
+    }
+
+    private double scaleRange(Player player, double baseRange) {
+        return Math.max(1.0, baseRange * getEnergyMultiplier(player));
     }
 
     private boolean isTrusted(Player caster, Player target) {
@@ -576,7 +605,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         switch (affinity.toLowerCase()) {
             case "flora" -> {
                 if (number == 1) {
-                    LivingEntity target = findTarget(player, 12);
+                    LivingEntity target = findTarget(player, scaleRange(player, 12));
 
                     if (target == null) {
                         player.sendMessage(ChatColor.RED
@@ -585,21 +614,21 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     }
 
                     if (target instanceof Player victim) {
-                        giveEffect(victim, PotionEffectType.SLOWNESS, 200, 1);
+                        giveEffect(victim, PotionEffectType.SLOWNESS, scaleDuration(player, 200), 1);
                         victim.sendMessage(ChatColor.GREEN
                             + "Vines have snared you!");
                     } else {
                         target.addPotionEffect(new PotionEffect(
-                            PotionEffectType.SLOWNESS, 200, 1));
+                            PotionEffectType.SLOWNESS, scaleDuration(player, 200), 1));
                     }
 
                     player.sendMessage(ChatColor.GREEN + "Vine Snare!");
                     success = true;
                 } else {
                     player.setHealth(Math.min(
-                        player.getMaxHealth(), player.getHealth() + 3.0));
+                        player.getMaxHealth(), player.getHealth() + scalePower(player, 3.0)));
                     // Regeneration III for 5 seconds.
-                    giveEffect(player, PotionEffectType.REGENERATION, 100, 2);
+                    giveEffect(player, PotionEffectType.REGENERATION, scaleDuration(player, 100), 2);
 
                     // Floral Bloom only heals nearby players who the caster trusts.
                     Set<UUID> trusted = trustedPlayers.getOrDefault(
@@ -609,8 +638,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                                 && !ally.equals(player)
                                 && trusted.contains(ally.getUniqueId())) {
                             ally.setHealth(Math.min(
-                                ally.getMaxHealth(), ally.getHealth() + 3.0));
-                            giveEffect(ally, PotionEffectType.REGENERATION, 100, 2);
+                                ally.getMaxHealth(), ally.getHealth() + scalePower(player, 3.0)));
+                            giveEffect(ally, PotionEffectType.REGENERATION, scaleDuration(player, 100), 2);
                             ally.sendMessage(ChatColor.GREEN
                                 + "Floral Bloom healed you!");
                         }
@@ -623,7 +652,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
             case "abyss" -> {
                 if (number == 1) {
-                    LivingEntity target = findTarget(player, 12);
+                    LivingEntity target = findTarget(player, scaleRange(player, 12));
 
                     if (target == null) {
                         player.sendMessage(ChatColor.RED
@@ -636,8 +665,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
                     if (pull.lengthSquared() > 0) pull.normalize();
 
-                    pull.multiply(1.25);
-                    pull.setY(0.35);
+                    pull.multiply(scalePower(player, 1.25));
+                    pull.setY(scalePower(player, 0.35));
                     target.setVelocity(pull);
 
                     if (target instanceof Player victim) {
@@ -649,11 +678,11 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     success = true;
                 } else {
                     Vector dash = player.getLocation().getDirection()
-                        .normalize().multiply(2.0);
-                    dash.setY(0.4);
+                        .normalize().multiply(scalePower(player, 2.0));
+                    dash.setY(scalePower(player, 0.4));
                     player.setVelocity(dash);
 
-                    giveEffect(player, PotionEffectType.RESISTANCE, 300, 0);
+                    giveEffect(player, PotionEffectType.RESISTANCE, scaleDuration(player, 300), 0);
                     player.sendMessage(ChatColor.DARK_AQUA + "Wave Surge!");
                     success = true;
                 }
@@ -661,7 +690,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
             case "sol" -> {
                 if (number == 1) {
-                    LivingEntity target = findTarget(player, 16);
+                    LivingEntity target = findTarget(player, scaleRange(player, 16));
 
                     if (target == null) {
                         player.sendMessage(ChatColor.RED
@@ -669,7 +698,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         return;
                     }
 
-                    target.damage(10.0, player);
+                    target.damage(scalePower(player, 10.0), player);
                     // Extremely long fire duration; water can still extinguish it.
                     target.setFireTicks(Integer.MAX_VALUE);
 
@@ -681,9 +710,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     for (Entity entity : player.getNearbyEntities(5, 3, 5)) {
                         if (entity instanceof LivingEntity target
                                 && !target.equals(player) && canAffect(player, target)) {
-                            target.damage(3.0, player);
+                            target.damage(scalePower(player, 3.0), player);
                             target.addPotionEffect(new PotionEffect(
-                                PotionEffectType.GLOWING, 600, 0));
+                                PotionEffectType.GLOWING, scaleDuration(player, 600), 0));
                             hit++;
                         }
                     }
@@ -701,16 +730,16 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     for (Entity entity : player.getNearbyEntities(4, 3, 4)) {
                         if (entity instanceof LivingEntity target
                                 && !target.equals(player) && canAffect(player, target)) {
-                            target.damage(6.0, player);
+                            target.damage(scalePower(player, 6.0), player);
 
                             Vector knockback = target.getLocation().toVector()
                                 .subtract(player.getLocation().toVector());
 
                             if (knockback.lengthSquared() > 0) {
-                                knockback.normalize().multiply(0.8);
+                                knockback.normalize().multiply(scalePower(player, 0.8));
                             }
 
-                            knockback.setY(0.35);
+                            knockback.setY(scalePower(player, 0.35));
                             target.setVelocity(knockback);
                             hit++;
                         }
@@ -720,8 +749,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         + "Seismic Strike! Targets hit: " + hit);
                     success = true;
                 } else {
-                    giveEffect(player, PotionEffectType.RESISTANCE, 600, 1);
-                    giveEffect(player, PotionEffectType.ABSORPTION, 600, 1);
+                    giveEffect(player, PotionEffectType.RESISTANCE, scaleDuration(player, 600), 1);
+                    giveEffect(player, PotionEffectType.ABSORPTION, scaleDuration(player, 600), 1);
                     player.sendMessage(ChatColor.GRAY + "Earth Guards!");
                     success = true;
                 }
@@ -729,7 +758,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
             case "tempest" -> {
                 if (number == 1) {
-                    LivingEntity target = findTarget(player, 12);
+                    LivingEntity target = findTarget(player, scaleRange(player, 12));
 
                     if (target == null) {
                         player.sendMessage(ChatColor.RED
@@ -745,7 +774,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                             if (lightningTarget.isValid() && !lightningTarget.isDead()) {
                                 lightningTarget.getWorld().strikeLightningEffect(
                                     lightningTarget.getLocation());
-                                lightningTarget.damage(3.0, player);
+                                lightningTarget.damage(scalePower(player, 3.0), player);
                             }
                         }, delay);
                     }
@@ -754,9 +783,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     success = true;
                 } else {
                     Vector direction = player.getLocation().getDirection()
-                        .normalize().multiply(2.2);
+                        .normalize().multiply(scalePower(player, 2.2));
 
-                    direction.setY(0.45);
+                    direction.setY(scalePower(player, 0.45));
                     player.setVelocity(direction);
                     player.sendMessage(ChatColor.AQUA + "Windstep activated!");
                     success = true;
@@ -771,7 +800,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     Location origin = player.getLocation();
                     Location destination = null;
 
-                    for (double distance = 8; distance >= 1; distance -= 1) {
+                    for (double distance = scaleRange(player, 8); distance >= 1; distance -= 1) {
                         Location candidate = origin.clone().add(
                             direction.clone().multiply(distance));
 
@@ -800,13 +829,13 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                 } else {
                     int hit = 0;
 
-                    for (Entity entity : player.getNearbyEntities(8, 5, 8)) {
+                    for (Entity entity : player.getNearbyEntities(scaleRange(player, 8), scaleRange(player, 5), scaleRange(player, 8))) {
                         if (entity instanceof LivingEntity target
                                 && !target.equals(player) && canAffect(player, target)) {
                             target.addPotionEffect(new PotionEffect(
-                                PotionEffectType.WEAKNESS, 160, 0));
+                                PotionEffectType.WEAKNESS, scaleDuration(player, 160), 0));
                             target.addPotionEffect(new PotionEffect(
-                                PotionEffectType.BLINDNESS, 100, 0));
+                                PotionEffectType.BLINDNESS, scaleDuration(player, 100), 0));
                             hit++;
                         }
                     }
@@ -823,6 +852,12 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
         if (success) {
             cooldowns.put(key, now + cooldown);
+            int currentEnergy = getEnergy(player.getUniqueId());
+            double multiplier = getEnergyMultiplier(player);
+            String percent = Math.round(multiplier * 100) + "%";
+            player.sendMessage(ChatColor.GRAY + "Energy scaling: "
+                + ChatColor.AQUA + currentEnergy + " "
+                + ChatColor.GRAY + "(" + percent + " power)");
         }
     }
 

@@ -574,6 +574,10 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         return ((readyAt - now + 999) / 1000) + "s";
     }
 
+    private boolean hasDragonEgg(Player player) {
+        return player.getInventory().contains(Material.DRAGON_EGG);
+    }
+
     private void activateAbility(Player player, int number) {
         String affinity = affinities.get(player.getUniqueId());
 
@@ -606,6 +610,11 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
             case "tempest" -> cooldown = (number == 1) ? 220_000L : 135_000L;
             case "umbra" -> cooldown = (number == 1) ? 160_000L : 130_000L;
             default -> cooldown = 120_000L;
+        }
+
+        // The Dragon Egg perk halves active-ability cooldowns for its holder only.
+        if (hasDragonEgg(player)) {
+            cooldown /= 2;
         }
 
         boolean success = false;

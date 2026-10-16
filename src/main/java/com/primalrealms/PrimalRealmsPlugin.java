@@ -156,9 +156,11 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
     }
 
     private int getEnergy(UUID uuid) {
-        return energy.getOrDefault(
+        // Always enforce the configured energy limits, including for any older saved data.
+        int storedEnergy = energy.getOrDefault(
             uuid, getConfig().getInt("energy.starting-energy", 0)
         );
+        return clampEnergy(storedEnergy);
     }
 
     private void changeEnergy(UUID uuid, int amount) {
@@ -370,8 +372,12 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player victim = event.getEntity();
 
-        changeEnergy(victim.getUniqueId(),
-            -getConfig().getInt("energy.death-penalty", 1));
+        // Players at minimum energy (-5 by default) do not lose any more on death.
+        int minimumEnergy = getConfig().getInt("energy.minimum-energy", -5);
+        if (getEnergy(victim.getUniqueId()) > minimumEnergy) {
+            changeEnergy(victim.getUniqueId(),
+                -getConfig().getInt("energy.death-penalty", 1));
+        }
 
         Player killer = victim.getKiller();
 
@@ -441,9 +447,11 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         ));
     }
 
-    // Energy scaling: -5 = 0.5x, 0 = 1.0x (current baseline), +5 = 1.5x.
+    // Active-ability energy scaling only: -5 = 0.5x, 0 = 1.0x, +5 = 1.5x.
+    // Cooldowns and passive effects do not use this multiplier.
     private double getEnergyMultiplier(Player player) {
-        return 1.0 + (getEnergy(player.getUniqueId()) * 0.10);
+        int currentEnergy = getEnergy(player.getUniqueId());
+        return Math.max(0.5, Math.min(1.5, 1.0 + (currentEnergy * 0.10)));
     }
 
     private double scalePower(Player player, double baseValue) {

@@ -5,6 +5,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Particle;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.command.Command;
@@ -578,6 +579,33 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         return player.getInventory().contains(Material.DRAGON_EGG);
     }
 
+    // Lightweight particle helpers for ability visuals. These are cosmetic only.
+    private void particleBurst(Location location, Particle particle, int count,
+                               double offsetX, double offsetY, double offsetZ, double speed) {
+        if (location == null || location.getWorld() == null) return;
+        location.getWorld().spawnParticle(particle, location, count,
+            offsetX, offsetY, offsetZ, speed);
+    }
+
+    private void particleRing(Location center, Particle particle, double radius, int points, double yOffset) {
+        if (center == null || center.getWorld() == null) return;
+        for (int i = 0; i < points; i++) {
+            double angle = (Math.PI * 2.0 * i) / points;
+            Location point = center.clone().add(Math.cos(angle) * radius, yOffset, Math.sin(angle) * radius);
+            center.getWorld().spawnParticle(particle, point, 2, 0.08, 0.08, 0.08, 0.01);
+        }
+    }
+
+    private void particleLine(Location start, Location end, Particle particle, int points) {
+        if (start == null || end == null || start.getWorld() == null
+                || !start.getWorld().equals(end.getWorld())) return;
+        Vector delta = end.toVector().subtract(start.toVector());
+        for (int i = 0; i <= points; i++) {
+            Location point = start.clone().add(delta.clone().multiply((double) i / points));
+            start.getWorld().spawnParticle(particle, point, 2, 0.04, 0.04, 0.04, 0.01);
+        }
+    }
+
     private void activateAbility(Player player, int number) {
         String affinity = affinities.get(player.getUniqueId());
 
@@ -639,6 +667,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                             PotionEffectType.SLOWNESS, scaleDuration(player, 200), 1));
                     }
 
+                    particleBurst(target.getLocation().add(0, 1, 0), Particle.HAPPY_VILLAGER, 24, 0.7, 0.8, 0.7, 0.08);
+                    particleBurst(target.getLocation(), Particle.COMPOSTER, 30, 0.6, 0.15, 0.6, 0.04);
+                    particleRing(target.getLocation(), Particle.HAPPY_VILLAGER, 1.1, 16, 0.1);
                     player.sendMessage(ChatColor.GREEN + "Vine Snare!");
                     success = true;
                 } else {
@@ -662,6 +693,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         }
                     }
 
+                    particleRing(player.getLocation(), Particle.HAPPY_VILLAGER, 2.2, 28, 0.2);
+                    particleBurst(player.getLocation().add(0, 1, 0), Particle.COMPOSTER, 35, 1.4, 0.8, 1.4, 0.05);
+                    particleBurst(player.getLocation().add(0, 1, 0), Particle.END_ROD, 12, 0.8, 0.8, 0.8, 0.03);
                     player.sendMessage(ChatColor.GREEN + "Floral Bloom!");
                     success = true;
                 }
@@ -691,6 +725,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                             + "The Abyss pulls you!");
                     }
 
+                    particleBurst(target.getLocation().add(0, 1, 0), Particle.PORTAL, 38, 0.45, 0.7, 0.45, 0.45);
+                    particleBurst(target.getLocation(), Particle.SOUL, 18, 0.45, 0.2, 0.45, 0.04);
+                    particleLine(target.getLocation().add(0, 1, 0), player.getLocation().add(0, 1, 0), Particle.PORTAL, 18);
                     player.sendMessage(ChatColor.DARK_AQUA + "Abyssal Grasp!");
                     success = true;
                 } else {
@@ -700,6 +737,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     player.setVelocity(dash);
 
                     giveEffect(player, PotionEffectType.RESISTANCE, scaleDuration(player, 300), 0);
+                    particleBurst(player.getLocation(), Particle.CLOUD, 36, 1.0, 0.35, 1.0, 0.08);
+                    particleRing(player.getLocation(), Particle.SOUL, 2.0, 24, 0.2);
+                    particleBurst(player.getLocation().add(0, 1, 0), Particle.BUBBLE, 18, 0.7, 0.7, 0.7, 0.05);
                     player.sendMessage(ChatColor.DARK_AQUA + "Wave Surge!");
                     success = true;
                 }
@@ -719,6 +759,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     // Extremely long fire duration; water can still extinguish it.
                     target.setFireTicks(Integer.MAX_VALUE);
 
+                    particleLine(player.getEyeLocation(), target.getLocation().add(0, 1, 0), Particle.END_ROD, 24);
+                    particleBurst(target.getLocation().add(0, 1, 0), Particle.FLAME, 28, 0.5, 0.7, 0.5, 0.06);
+                    particleBurst(target.getLocation(), Particle.LAVA, 10, 0.35, 0.2, 0.35, 0.02);
                     player.sendMessage(ChatColor.GOLD + "Solar Lance!");
                     success = true;
                 } else {
@@ -734,6 +777,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         }
                     }
 
+                    particleRing(player.getLocation(), Particle.FLAME, 2.6, 32, 0.2);
+                    particleBurst(player.getLocation().add(0, 1, 0), Particle.END_ROD, 36, 2.0, 1.0, 2.0, 0.08);
+                    particleBurst(player.getLocation().add(0, 1, 0), Particle.GLOW, 20, 1.6, 0.8, 1.6, 0.03);
                     player.sendMessage(ChatColor.GOLD
                         + "Radiant Burst! Targets hit: " + hit);
                     success = true;
@@ -762,12 +808,18 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         }
                     }
 
+                    particleRing(player.getLocation(), Particle.CRIT, 3.0, 32, 0.1);
+                    particleBurst(player.getLocation(), Particle.CLOUD, 34, 2.0, 0.25, 2.0, 0.08);
+                    particleBurst(player.getLocation().add(0, 0.6, 0), Particle.CRIT, 22, 1.5, 0.35, 1.5, 0.05);
                     player.sendMessage(ChatColor.GRAY
                         + "Seismic Strike! Targets hit: " + hit);
                     success = true;
                 } else {
                     giveEffect(player, PotionEffectType.RESISTANCE, scaleDuration(player, 600), 1);
                     giveEffect(player, PotionEffectType.ABSORPTION, scaleDuration(player, 600), 1);
+                    particleRing(player.getLocation(), Particle.CRIT, 1.7, 24, 0.15);
+                    particleBurst(player.getLocation().add(0, 1, 0), Particle.CLOUD, 22, 0.8, 0.9, 0.8, 0.03);
+                    particleBurst(player.getLocation().add(0, 1, 0), Particle.TOTEM_OF_UNDYING, 12, 0.55, 0.7, 0.55, 0.04);
                     player.sendMessage(ChatColor.GRAY + "Earth Guards!");
                     success = true;
                 }
@@ -791,6 +843,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                             if (lightningTarget.isValid() && !lightningTarget.isDead()) {
                                 lightningTarget.getWorld().strikeLightningEffect(
                                     lightningTarget.getLocation());
+                                particleBurst(lightningTarget.getLocation().add(0, 1, 0),
+                                    Particle.ELECTRIC_SPARK, 24, 0.6, 0.9, 0.6, 0.12);
                                 lightningTarget.damage(scalePower(player, 3.0), player);
                             }
                         }, delay);
@@ -804,6 +858,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
                     direction.setY(scalePower(player, 0.45));
                     player.setVelocity(direction);
+                    particleBurst(player.getLocation(), Particle.CLOUD, 28, 0.8, 0.35, 0.8, 0.08);
+                    particleRing(player.getLocation(), Particle.ELECTRIC_SPARK, 1.5, 20, 0.35);
                     player.sendMessage(ChatColor.AQUA + "Windstep activated!");
                     success = true;
                 }
@@ -841,6 +897,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     destination.setYaw(player.getLocation().getYaw());
                     destination.setPitch(player.getLocation().getPitch());
                     player.teleport(destination);
+                    particleBurst(origin.add(0, 1, 0), Particle.PORTAL, 30, 0.45, 0.8, 0.45, 0.3);
+                    particleBurst(destination.clone().add(0, 1, 0), Particle.PORTAL, 42, 0.55, 0.9, 0.55, 0.35);
+                    particleBurst(destination, Particle.SOUL, 18, 0.5, 0.2, 0.5, 0.04);
                     player.sendMessage(ChatColor.DARK_PURPLE + "Shadowstep!");
                     success = true;
                 } else {
@@ -857,6 +916,9 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         }
                     }
 
+                    particleRing(player.getLocation(), Particle.SOUL, 3.0, 32, 0.15);
+                    particleBurst(player.getLocation().add(0, 1, 0), Particle.PORTAL, 44, 2.0, 1.0, 2.0, 0.35);
+                    particleBurst(player.getLocation().add(0, 1, 0), Particle.SOUL, 24, 1.5, 0.8, 1.5, 0.04);
                     player.sendMessage(ChatColor.DARK_PURPLE
                         + "Eclipse! Targets affected: " + hit);
                     success = true;

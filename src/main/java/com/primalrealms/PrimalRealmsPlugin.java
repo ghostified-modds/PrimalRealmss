@@ -240,7 +240,7 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         recipe.shape("DGD", "GNG", "DGD");
         recipe.setIngredient('D', Material.DIAMOND_BLOCK);
         recipe.setIngredient('G', Material.GOLD_BLOCK);
-        recipe.setIngredient('N', Material.NETHER_STAR);
+        recipe.setIngredient('N', Material.HEAVY_CORE);
 
         Bukkit.addRecipe(recipe);
     }
@@ -755,7 +755,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         return;
                     }
 
-                    target.damage(scalePower(player, 10.0), player);
+                    // Calibrated for roughly 10 damage against a full Protection III diamond set at 0 energy.
+                    target.damage(scalePower(player, 35.0), player);
                     // Extremely long fire duration; water can still extinguish it.
                     target.setFireTicks(Integer.MAX_VALUE);
 
@@ -770,7 +771,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     for (Entity entity : player.getNearbyEntities(5, 3, 5)) {
                         if (entity instanceof LivingEntity target
                                 && !target.equals(player) && canAffect(player, target)) {
-                            target.damage(scalePower(player, 3.0), player);
+                            // Calibrated for roughly 4 damage against a full Protection III diamond set at 0 energy.
+                            target.damage(scalePower(player, 19.5), player);
                             target.addPotionEffect(new PotionEffect(
                                 PotionEffectType.GLOWING, scaleDuration(player, 600), 0));
                             hit++;
@@ -793,7 +795,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                     for (Entity entity : player.getNearbyEntities(4, 3, 4)) {
                         if (entity instanceof LivingEntity target
                                 && !target.equals(player) && canAffect(player, target)) {
-                            target.damage(scalePower(player, 6.0), player);
+                            // Calibrated for roughly 6 damage against a full Protection III diamond set at 0 energy.
+                            target.damage(scalePower(player, 25.5), player);
 
                             Vector knockback = target.getLocation().toVector()
                                 .subtract(player.getLocation().toVector());
@@ -845,7 +848,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                                     lightningTarget.getLocation());
                                 particleBurst(lightningTarget.getLocation().add(0, 1, 0),
                                     Particle.ELECTRIC_SPARK, 24, 0.6, 0.9, 0.6, 0.12);
-                                lightningTarget.damage(scalePower(player, 3.0), player);
+                                // Each strike is calibrated for roughly 3 damage against a full Protection III diamond set at 0 energy.
+                                lightningTarget.damage(scalePower(player, 16.0), player);
                             }
                         }, delay);
                     }

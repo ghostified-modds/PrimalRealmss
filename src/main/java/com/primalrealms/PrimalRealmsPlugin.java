@@ -409,10 +409,10 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                 long lastHit = lastDamage.getOrDefault(
                     player.getUniqueId(), 0L);
 
-                // Flora's passive regeneration begins 3 seconds after taking damage.
-                if (System.currentTimeMillis() - lastHit >= 3000) {
+            case "flora" -> {
+                // Flora permanently has Regeneration I,
+                // even after taking damage.
                     giveEffect(player, PotionEffectType.REGENERATION, 40, 0);
-                }
             }
             case "abyss" -> {
                 if (player.isInWater()) {

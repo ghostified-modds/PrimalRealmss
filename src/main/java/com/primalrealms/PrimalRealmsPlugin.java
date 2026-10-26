@@ -1,4 +1,3 @@
-
 package com.primalrealms;
 
 import org.bukkit.Bukkit;
@@ -406,13 +405,8 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
 
         switch (affinity.toLowerCase()) {
             case "flora" -> {
-                long lastHit = lastDamage.getOrDefault(
-                    player.getUniqueId(), 0L);
-
-            case "flora" -> {
-                // Flora permanently has Regeneration I,
-                // even after taking damage.
-                    giveEffect(player, PotionEffectType.REGENERATION, 40, 0);
+                // Flora permanently has Regeneration I, even after taking damage.
+                giveEffect(player, PotionEffectType.REGENERATION, 40, 0);
             }
             case "abyss" -> {
                 if (player.isInWater()) {
@@ -650,52 +644,55 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
         switch (affinity.toLowerCase()) {
             case "flora" -> {
                 if (number == 1) {
-                    LivingEntity target = findTarget(player, scaleRange(player, 12));
+                    // Vine Snare affects every living entity in its area, except trusted players.
+                    int hit = 0;
+                    double range = scaleRange(player, 12);
+                    for (Entity entity : player.getNearbyEntities(range, range, range)) {
+                        if (!(entity instanceof LivingEntity target)
+                                || target.equals(player) || !canAffect(player, target)) {
+                            continue;
+                        }
 
-                    if (target == null) {
-                        player.sendMessage(ChatColor.RED
-                            + "Look at a nearby living target to snare it.");
-                        return;
-                    }
-
-                    if (target instanceof Player victim) {
-                        giveEffect(victim, PotionEffectType.SLOWNESS, scaleDuration(player, 200), 1);
-                        victim.sendMessage(ChatColor.GREEN
-                            + "Vines have snared you!");
-                    } else {
                         target.addPotionEffect(new PotionEffect(
                             PotionEffectType.SLOWNESS, scaleDuration(player, 200), 1));
+                        if (target instanceof Player victim) {
+                            victim.sendMessage(ChatColor.GREEN + "Vines have snared you!");
+                        }
+                        particleBurst(target.getLocation().clone().add(0, 1, 0),
+                            Particle.HAPPY_VILLAGER, 24, 0.7, 0.8, 0.7, 0.08);
+                        particleBurst(target.getLocation(), Particle.COMPOSTER,
+                            30, 0.6, 0.15, 0.6, 0.04);
+                        particleRing(target.getLocation(), Particle.HAPPY_VILLAGER, 1.1, 16, 0.1);
+                        hit++;
                     }
-
-                    particleBurst(target.getLocation().add(0, 1, 0), Particle.HAPPY_VILLAGER, 24, 0.7, 0.8, 0.7, 0.08);
-                    particleBurst(target.getLocation(), Particle.COMPOSTER, 30, 0.6, 0.15, 0.6, 0.04);
-                    particleRing(target.getLocation(), Particle.HAPPY_VILLAGER, 1.1, 16, 0.1);
-                    player.sendMessage(ChatColor.GREEN + "Vine Snare!");
+                    if (hit == 0) {
+                        player.sendMessage(ChatColor.RED
+                            + "There are no valid targets in range for Vine Snare.");
+                        return;
+                    }
+                    player.sendMessage(ChatColor.GREEN + "Vine Snare! Targets snared: " + hit);
                     success = true;
                 } else {
-                    player.setHealth(Math.min(
-                        player.getMaxHealth(), player.getHealth() + scalePower(player, 3.0)));
-                    // Regeneration III for 5 seconds.
+                    // Instantly heal 4 hearts (8 health), capped at maximum health.
+                    player.setHealth(Math.min(player.getMaxHealth(), player.getHealth() + 8.0));
+                    // Keep the existing Regeneration III effect for 5 seconds.
                     giveEffect(player, PotionEffectType.REGENERATION, scaleDuration(player, 100), 2);
-
-                    // Floral Bloom only heals nearby players who the caster trusts.
+                    // Floral Bloom also heals nearby players the caster trusts.
                     Set<UUID> trusted = trustedPlayers.getOrDefault(
                         player.getUniqueId(), Set.of());
                     for (Entity entity : player.getNearbyEntities(5, 5, 5)) {
                         if (entity instanceof Player ally
                                 && !ally.equals(player)
                                 && trusted.contains(ally.getUniqueId())) {
-                            ally.setHealth(Math.min(
-                                ally.getMaxHealth(), ally.getHealth() + scalePower(player, 3.0)));
+                            ally.setHealth(Math.min(ally.getMaxHealth(), ally.getHealth() + 8.0));
                             giveEffect(ally, PotionEffectType.REGENERATION, scaleDuration(player, 100), 2);
                             ally.sendMessage(ChatColor.GREEN
-                                + "Floral Bloom healed you!");
+                                + "Floral Bloom healed you for up to 4 hearts!");
                         }
                     }
-
                     particleRing(player.getLocation(), Particle.HAPPY_VILLAGER, 2.2, 28, 0.2);
-                    particleBurst(player.getLocation().add(0, 1, 0), Particle.COMPOSTER, 35, 1.4, 0.8, 1.4, 0.05);
-                    particleBurst(player.getLocation().add(0, 1, 0), Particle.END_ROD, 12, 0.8, 0.8, 0.8, 0.03);
+                    particleBurst(player.getLocation().clone().add(0, 1, 0), Particle.COMPOSTER, 35, 1.4, 0.8, 1.4, 0.05);
+                    particleBurst(player.getLocation().clone().add(0, 1, 0), Particle.END_ROD, 12, 0.8, 0.8, 0.8, 0.03);
                     player.sendMessage(ChatColor.GREEN + "Floral Bloom!");
                     success = true;
                 }
@@ -755,8 +752,11 @@ public final class PrimalRealmsPlugin extends JavaPlugin implements Listener {
                         return;
                     }
 
-                    // Calibrated for roughly 10 damage against a full Protection III diamond set at 0 energy.
-                    target.damage(scalePower(player, 35.0), player);
+                    // Raw damage calibrated from the observed server result: 0 energy targets
+                    // about 8 final health damage, increasing by about 1 per energy level.
+                    // Verify against a full Protection III diamond set; other defenses can change it.
+                    double solarLanceRawDamage = 21.0 + (getEnergy(player.getUniqueId()) * 2.6);
+                    target.damage(Math.max(1.0, solarLanceRawDamage), player);
                     // Extremely long fire duration; water can still extinguish it.
                     target.setFireTicks(Integer.MAX_VALUE);
 
